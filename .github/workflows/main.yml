@@ -11,8 +11,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # 1. GitHubリポジトリのコードをチェックアウト
 
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0 # 2. Firebaseデプロイ用のアクションを使用
+      # --- 🚀 ここから追加するビルドステップ 🚀 ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20' # あなたのプロジェクトに合わせてバージョンを変更
+          
+      - name: Install dependencies
+        run: npm install
+        
+      - name: Build project
+        run: npm run build # または build:production など、あなたのpackage.jsonに合わせたコマンド
+      # --- 🚀 ここまで追加 🚀 ---
+      
+      - name: Deploy to Firebase # 2. Firebaseデプロイ用のアクション
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }} # GitHubのトークン
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LINK_LINKER }} # プロジェクトに合わせたサービスアカウントを自動で使用
