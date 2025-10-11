@@ -6,17 +6,29 @@ on:
       - main  # このブランチへのpushで実行
 
 jobs:
-  deploy: # ジョブ名を修正（build_and_deployからdeployへ）
+  deploy: # ジョブ名もシンプルに
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # 1. GitHubリポジトリのコードをチェックアウト
+      - uses: actions/checkout@v4 # 1. リポジトリのコードをチェックアウト
 
-      # --- ❌ ここにあった npm install や npm run build のステップを全て削除！ ---
+      # Node.jsセットアップ、npm install、npm run build ステップは、
+      # 純粋なHTMLプロジェクトのため、全て削除されています。
 
-      - name: Deploy to Firebase # 2. Firebaseデプロイ用のアクション
+      - name: Deploy to Firebase # 2. チェックアウトしたコードを直接デプロイ
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LINK_LINKER }} 
-          projectId: link-linker # 🔥 あなたのプロジェクトIDに設定
+          projectId: link-linker # 🔥 あなたのプロジェクトID
           channelId: live 
+
+
+
+
+
+
+
+
+
+
+
