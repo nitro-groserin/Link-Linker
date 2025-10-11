@@ -1,0 +1,23 @@
+name: Deploy to Firebase Hosting
+
+on:
+  push:
+    branches:
+      - main  # または master など、あなたが使っているブランチ名に変更
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # 1. GitHubリポジトリのコードをチェックアウト
+
+      - name: Deploy to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0 # 2. Firebaseデプロイ用のアクションを使用
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }} # GitHubのトークン
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LINK_LINKER }} # プロジェクトに合わせたサービスアカウントを自動で使用
+          projectId: link-linker # 🔥 ここをあなたのプロジェクトID（link-linker）に設定
+          channelId: live # liveチャンネル（本番環境）にデプロイ
+
+
+
