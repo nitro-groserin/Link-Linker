@@ -284,10 +284,6 @@
 <body>
 
 
-
-
-
-
 <div style="
     text-align: center;
     border: 2px solid #ff4500; 
@@ -391,8 +387,13 @@
 
 
 
+
+
+
+
 <script type="module">
     // 1. Firebase v12のモジュールをインポート
+    // ★ where を使用するため、インポートを確認
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
     import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
@@ -565,7 +566,7 @@
 
             savedMemoDisplay.innerHTML = '';
             savedMemoDisplay.textContent = 'まだツイートはありません。';
-            newMemoInput.value = '';
+            newMemoInput.value = ''; // ★ ここを修正
 
             memoStatus.textContent = '🗑️ ツイートは完全に消去されました。';
             clearSound.play().catch(e => console.log("消去音の再生に失敗:", e)); 
@@ -753,6 +754,16 @@
             if (linkNameInput) linkNameInput.focus();
         }
     }
+// Part 3/3 (JavaScript: リスナーと実行ロジック) に続く -->
+
+
+
+
+
+
+
+
+
 
     function formatTime(ms) {
         const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -764,11 +775,19 @@
         return `${minutes}:${paddedSeconds}`;
     }
 
+    // ★ ここが最も重要な修正点です ★
     function startFirestoreListener() {
-         const linksCollection = collection(db, "links"); // 💡 Firebase v12
+         const linksCollection = collection(db, "links"); 
          
          // リアルタイムリスナーを開始
-         onSnapshot(query(linksCollection, orderBy("timestamp", "desc")), (snapshot) => {
+         // 💡 【修正済み】where("expirationTime", ">", Date.now()) を追加し、有効なリンクのみを取得
+         const q = query(
+             linksCollection, 
+             where("expirationTime", ">", Date.now()), // ★ 有効期限切れのリンクは除外
+             orderBy("expirationTime", "asc") // ★ orderByの最初のフィールドはwhere句のフィールドに合わせる必要があるため変更
+         );
+
+         onSnapshot(q, (snapshot) => {
              allLinks = snapshot.docs.map(doc => ({
                  id: doc.id,
                  ...doc.data()
@@ -828,5 +847,12 @@
 
 
 
-    
+
+
+
+
+
+
+
+
 
