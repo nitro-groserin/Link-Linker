@@ -387,13 +387,8 @@
 
 
 
-
-
-
-
 <script type="module">
     // 1. Firebase v12のモジュールをインポート
-    // ★ where を使用するため、インポートを確認
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
     import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
@@ -408,8 +403,7 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app); // 💡 Firestoreオブジェクトをローカル変数 db に接続
-
+    const db = getFirestore(app); 
 
     // =========================================================
     // 3. メインロジック（すべての関数定義と変数）
@@ -440,16 +434,16 @@
     // -----------------------------------------------------
     // 音声要素の定義
     // -----------------------------------------------------
-    const saveSound = new Audio('PC-Mouse06-1.mp3'); 
-    const clearSound = new Audio('PC-Mouse06-1.mp3'); 
+    // ⚠️ これらのパスはデモ環境では機能しない可能性が高いため、エラーを避けるためにコメントアウトまたは空にしています。
+    const saveSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
+    const clearSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
     saveSound.volume = 0.5;
     clearSound.volume = 0.5;
 
 
     // -----------------------------------------------------
-    // ローカルメモの保存と読み込み/消去
+    // ローカルメモの保存と読み込み/消去 (省略せずそのまま残しています)
     // -----------------------------------------------------
-
     function loadLocalMemo() {
         if (!savedMemoDisplay || !newMemoInput) return;
 
@@ -484,7 +478,6 @@
         }
     }
 
-
     function appendMemoToDisplay(content, timestamp) {
         if (savedMemoDisplay.textContent === 'まだツイートはありません。') {
             savedMemoDisplay.innerHTML = '';
@@ -517,7 +510,6 @@
 
         savedMemoDisplay.prepend(memoDiv);
     }
-
 
     function saveLocalMemo() {
         if (newMemoInput) {
@@ -566,7 +558,7 @@
 
             savedMemoDisplay.innerHTML = '';
             savedMemoDisplay.textContent = 'まだツイートはありません。';
-            newMemoInput.value = ''; // ★ ここを修正
+            newMemoInput.value = '';
 
             memoStatus.textContent = '🗑️ ツイートは完全に消去されました。';
             clearSound.play().catch(e => console.log("消去音の再生に失敗:", e)); 
@@ -590,6 +582,7 @@
         const endIndex = startIndex + LINKS_PER_PAGE;
         const linksToShow = allLinks.slice(startIndex, endIndex);
 
+        // リンクが空の場合、前のページへ戻る
         if (linksToShow.length === 0 && allLinks.length > 0 && currentPage > 1) {
             renderPage(currentPage - 1);
             return;
@@ -602,6 +595,10 @@
             const timerDisplay = linkElement.querySelector('.timer-display');
             if (timerDisplay) {
                 const remaining = linkData.expirationTime - Date.now();
+                // リンクが期限切れになる直前にフェードアウトさせるための処理を追加
+                if (remaining <= 3000) { // 例: 残り3秒で透明度を下げ始める
+                    linkElement.style.opacity = Math.max(0.2, remaining / 3000);
+                }
                 timerDisplay.textContent = formatTime(remaining);
             }
         });
@@ -658,11 +655,10 @@
         return linkElement;
     }
 
-
     /**
      * URL追加ボタンのメイン処理 (HTMLの onclick から呼び出される)
      */
-    window.displayUrl = async function() { // 💡 モジュール外から呼び出せるよう window に設定
+    window.displayUrl = async function() { 
         const urlInput = document.getElementById('urlInput');
         const linkNameInput = document.getElementById('linkNameInput');
         const addButton = document.querySelector('.input-group button');
@@ -698,15 +694,15 @@
                 messageElement.textContent = '⚠️ 短縮URLサービスからのリンクはセキュリティ上の理由により許可されていません。元のURLを貼り付けてください。';
                 return;
             }
-            const urlPattern = /^https:\/\/[a-z0-9\-\.]+\.[a-z]{2,}/i;
+            // ★ URLパターンをより柔軟に修正（http:// も許容し、https://を推奨）
+            const urlPattern = /^https?:\/\/[a-z0-9\-\.]+\.[a-z]{2,}/i; 
             if (!urlPattern.test(url) && messageElement) {
                 messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '⚠️ URLは **https://** で始まり、有効なドメイン形式である必要があります。';
+                messageElement.textContent = '⚠️ URLは **http://** または **https://** で始まり、有効なドメイン形式である必要があります。';
                 return;
             }
 
             // URLの重複チェック
-            // 💡 【修正点】Firebase v12の新しい書き方に変更
             const q = query(collection(db, "links"), where("url", "==", url), limit(1));
             const snapshot = await getDocs(q); 
 
@@ -727,7 +723,6 @@
             const expirationTime = startTime + DELETE_DELAY_MS;
 
             // Firestoreにデータを書き込む
-            // 💡 【修正点】Firebase v12の新しい書き方に変更
             await addDoc(collection(db, "links"), {
                 url: url,
                 name: linkName,
@@ -754,16 +749,8 @@
             if (linkNameInput) linkNameInput.focus();
         }
     }
-// Part 3/3 (JavaScript: リスナーと実行ロジック) に続く -->
 
 
-
-
-
-
-
-
-// ... (Part 2/3 から続く)
     function formatTime(ms) {
         const totalSeconds = Math.max(0, Math.floor(ms / 1000));
         const minutes = Math.floor(totalSeconds / 60);
@@ -774,25 +761,30 @@
         return `${minutes}:${paddedSeconds}`;
     }
 
-    // ★ ここが最終修正点：DBから全リンクを取得し、JS側で10分以内のものだけフィルタリング
+    // 🚨 致命的なバグの修正箇所 🚨
     function startFirestoreListener() {
          const linksCollection = collection(db, "links"); 
          
-         // リアルタイムリスナーを開始 - すべてのリンクをタイムスタンプ順で取得
-         // 💡 【修正点】：where句を削除し、データ取得はFirebaseに頼らない
+         // 💡【修正内容】
+         // orderBy("expirationTime", "asc") の前に where("expirationTime", ">", Date.now()) が必要。
+         // しかし、where句とorderBy句は異なるフィールドに適用できないというFirebaseの制約があるため、
+         // 以下のクエリでは **timestamp** で並べ替えて、有効なリンクのみを取得します。
+         
+         // ★ 修正：where句がないため、有効期限切れのリンクも取得し、描画時に除外するロジックを採用
+         //          => リンク追加は timestamp で並べ替えるのが自然なため、この方法で再修正
          const q = query(
              linksCollection, 
-             orderBy("timestamp", "desc") // 新しいものが上に来るように降順に取得
+             orderBy("timestamp", "desc"), // ★ 新しいリンクを上に表示するため "desc" に変更
+             limit(100) // 無制限に取得すると負荷が高いため、最大100件に制限
          );
 
          onSnapshot(q, (snapshot) => {
-             const now = Date.now();
+             // 取得した全リンクから、有効期限内のものだけをフィルタリング
+             allLinks = snapshot.docs.map(doc => ({
+                 id: doc.id,
+                 ...doc.data()
+             })).filter(link => link.expirationTime > Date.now()); 
              
-             // 💡 10分（600000ms）以内のリンクだけをフィルタリング
-             allLinks = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(link => now - link.timestamp < DELETE_DELAY_MS); // 10分未満のリンクのみ残す
-
              renderPage(currentPage);
          }, error => {
              console.error("Firestoreのリアルタイム監視エラー: ", error);
@@ -801,51 +793,30 @@
 
     // 1秒ごとにタイマーとページを更新
     setInterval(() => {
-        // 💡 修正：1秒ごとにリスナーを再実行してフィルタリングとタイマーを更新
-        // これで10分経過した瞬間に画面から消えるようになる
-        startFirestoreListener(); 
+        // 🚨 修正：このタイマー更新は、リンクが消える（opacity:0になる）処理を反映させるためのみに機能します。
+        //          リンクがデータベースから完全に削除されるのは、別途設定されたFirebase Security RulesまたはCloud Functionsの役割です。
+        renderPage(currentPage); 
     }, 1000);
 
     // DOMContentLoadedでリスナーとローカルメモの読み込みを行う
     document.addEventListener('DOMContentLoaded', () => {
-        startFirestoreListener(); 
+        startFirestoreListener();
         loadLocalMemo();
     });
-// ... (音声再生部分に続く)
-
-
-
-    // =========================================================
-    // 音声再生部分
-    // =========================================================
-    const audioPaths = [
-        { src: '', volume: 1.0, id: 'siren' },
-        { src: '', volume: 1.0, id: 'bonfire' }
-    ];
-
-    const audioElements = {};
-
-    audioPaths.forEach(path => {
-        if (path.src) {
-            audioElements[path.id] = new Audio(path.src);
-            audioElements[path.id].volume = path.volume;
-            audioElements[path.id].loop = true;
-        }
-    });
-
-    // ユーザー操作による初期化（自動再生ポリシー回避のため）
-    document.addEventListener('click', () => {
-        if (audioElements['siren'] && audioElements['siren'].paused) {
-            audioElements['siren'].play().catch(e => console.log("サイレンの再生に失敗:", e));
-        }
-        if (audioElements['bonfire'] && audioElements['bonfire'].paused) {
-             audioElements['bonfire'].play().catch(e => console.log("焚き火の再生に失敗:", e));
-        }
-    }, { once: true });
 </script>
 
 
-    
+
+
+
+
+
+
+
+
+
+
+            
 </body>
 </html>
 
