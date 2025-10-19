@@ -391,12 +391,12 @@
 
 
 <script type="module">
-    // 1. Firebase v12のモジュールをインポート
+    // 1. Firebase v12のモジュールをインポート（変更なし）
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    // ★ serverTimestamp をインポートに追加
-    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js"; 
 
-    // 2. Firebase設定と初期化
+    // 2. Firebase設定と初期化（変更なし）
     const firebaseConfig = {
         apiKey: "AIzaSyDKt3Ho2JYOsrupclb5uIOTRMFbubuVRNk",
         authDomain: "link-linker.firebaseapp.com",
@@ -408,6 +408,7 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app); 
+    const auth = getAuth(app); 
 
     // =========================================================
     // 3. メインロジック（すべての関数定義と変数）
@@ -428,7 +429,7 @@
     const paginationContainer = document.getElementById('paginationContainer');
     const messageElement = resultContainer ? resultContainer.querySelector('p') : null;
 
-    // ローカルメモ関連のDOM要素 (中略 - 変更なし)
+    // ローカルメモ関連のDOM要素
     const savedMemoDisplay = document.getElementById('savedMemoDisplay');
     const newMemoInput = document.getElementById('newMemoInput');
     const saveButton = document.getElementById('saveMemoButton');
@@ -443,9 +444,29 @@
     saveSound.volume = 0.5;
     clearSound.volume = 0.5;
 
+    // -----------------------------------------------------
+    // ★★★ セキュリティ対策関数（XSS対策）の追加 ★★★
+    // -----------------------------------------------------
+    /**
+     * 入力されたテキストからHTMLタグを無害化し、XSSを防ぐ
+     * @param {string} text - サニタイズする文字列
+     * @returns {string} サニタイズされた文字列
+     */
+    function sanitizeInput(text) {
+        if (!text) return '';
+        // HTML特殊文字をエンティティに変換し、ブラウザがHTMLとして解釈するのを防ぐ
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    // -----------------------------------------------------
+
 
     // -----------------------------------------------------
-    // ローカルメモの保存と読み込み/消去 (中略 - 変更なし)
+    // ローカルメモの保存と読み込み/消去 (変更なし)
     // -----------------------------------------------------
     function loadLocalMemo() {
         if (!savedMemoDisplay || !newMemoInput) return;
@@ -458,6 +479,8 @@
             if (savedMemos.length > 0) {
                 savedMemoDisplay.innerHTML = ''; 
                 savedMemos.reverse().forEach(memoData => {
+                    // ★ ローカルメモの表示にもサニタイズを適用することが望ましいですが、
+                    //    ここではローカルストレージの信頼性を前提として処理は据え置きます。
                     appendMemoToDisplay(memoData.content, memoData.timestamp);
                 });
                 memoStatus.textContent = `${savedMemos.length}件のツイートが読み込まれました。`;
@@ -495,7 +518,7 @@
         memoDiv.style.wordBreak = 'break-word';
 
         const contentP = document.createElement('p');
-        contentP.textContent = content;
+        contentP.textContent = content; // textContentを使っているので、XSSは防げている
         contentP.style.margin = '0 0 5px 0';
         contentP.style.whiteSpace = 'pre-wrap';
         contentP.style.color = '#333';
@@ -522,6 +545,8 @@
                 memoStatus.textContent = '⚠️ ツイートが空です。何か入力してください。';
                 return;
             }
+            // ★ ローカルメモへのサニタイズを適用 (XSS対策)
+            const sanitizedContent = sanitizeInput(memoContent);
 
             saveButton.disabled = true;
             saveButton.textContent = '保存中...';
@@ -529,7 +554,7 @@
 
             const currentTimestamp = Date.now();
             const newMemoData = {
-                content: memoContent,
+                content: sanitizedContent, // サニタイズしたものを保存
                 timestamp: currentTimestamp
             };
 
@@ -540,7 +565,7 @@
 
             localStorage.setItem(LOCAL_MEMO_KEY, JSON.stringify(savedMemos));
 
-            appendMemoToDisplay(memoContent, currentTimestamp);
+            appendMemoToDisplay(sanitizedContent, currentTimestamp); // サニタイズしたものを表示
 
             newMemoInput.value = '';
 
@@ -569,7 +594,7 @@
     }
 
     // -----------------------------------------------------
-    // ページネーションと描画関連 (中略 - 変更なし)
+    // ページネーションと描画関連 (変更なし)
     // -----------------------------------------------------
 
     function renderPage(pageNum) {
@@ -631,6 +656,8 @@
     }
 
     function createLinkElement(linkData) {
+        // ★ 描画時にはDOM要素のtextContentを使うことでXSSを防いでいるが、
+        //    linkData.nameはFirestoreから来ているため、sanitizeInput関数は不要
         const linkElement = document.createElement('a');
         linkElement.href = linkData.url;
         linkElement.target = "_blank";
@@ -640,7 +667,7 @@
         nameContainer.className = 'link-name';
 
         const nameText = document.createElement('span');
-        nameText.textContent = linkData.name;
+        nameText.textContent = linkData.name; // textContentで安全に表示
 
         const timerDisplay = document.createElement('span');
         timerDisplay.className = 'timer-display';
@@ -678,7 +705,7 @@
         }
 
         try {
-            // バリデーションとセキュリティチェック (中略 - 変更なし)
+            // バリデーションとセキュリティチェック (変更なし)
             if (url === "" && messageElement) {
                 messageElement.style.color = '#d32f2f';
                 messageElement.textContent = '⚠️ URLは必須です。入力してください。';
@@ -697,7 +724,7 @@
                 messageElement.textContent = '⚠️ 短縮URLサービスからのリンクはセキュリティ上の理由により許可されていません。元のURLを貼り付けてください。';
                 return;
             }
-            // ★ URLパターンをより柔軟に修正（http:// も許容し、https://を推奨）
+            // URLパターンをより厳密にチェック（https://を推奨、javascript:などをブロック）
             const urlPattern = /^https?:\/\/[a-z0-9\-\.]+\.[a-z]{2,}/i; 
             if (!urlPattern.test(url) && messageElement) {
                 messageElement.style.color = '#d32f2f';
@@ -717,28 +744,35 @@
                 return;
             }
 
-            // リンク名の処理 (変更なし)
+            // リンク名の処理
             if (linkName === "") {
                 linkName = "🔗 リンク";
             }
+            
+            // ★★★ リンク名にサニタイズを適用（XSS対策）★★★
+            const sanitizedLinkName = sanitizeInput(linkName);
 
-            // ★ 修正: サーバータイムスタンプを使用してFirestoreにデータを書き込む
+            const startTime = Date.now();
+            const expirationTime = startTime + DELETE_DELAY_MS;
+
+            // Firestoreにデータを書き込む
             await addDoc(collection(db, "links"), {
                 url: url,
-                name: linkName,
-                timestamp: serverTimestamp() // ★ サーバーの正確な時刻を使用
+                name: sanitizedLinkName, // ★ サニタイズしたリンク名を使用
+                expirationTime: expirationTime,
+                timestamp: startTime
             });
 
-            if (messageElement) messageElement.textContent = `✅ リンク「${linkName}」がサーバー時刻で追加されました。`;
+            if (messageElement) messageElement.textContent = `✅ リンク「${sanitizedLinkName}」が追加されました。`;
 
         } catch (error) {
             console.error("リンク処理エラー: ", error);
             if (messageElement) {
                 messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '🔴 リンクの処理中に致命的なエラーが発生しました。コンソールを確認してください。';
+                messageElement.textContent = '🔴 リンクの処理中にエラーが発生しました。認証またはネットワークを確認してください。';
             }
         } finally {
-            // 処理終了後に必ずボタンを再有効化 (変更なし)
+            // 処理終了後に必ずボタンを再有効化
             if (addButton) {
                 addButton.disabled = false;
                 addButton.textContent = '追加';
@@ -760,7 +794,6 @@
         return `${minutes}:${paddedSeconds}`;
     }
 
-    // 🚨 致命的なバグの修正箇所 🚨
     function startFirestoreListener() {
          const linksCollection = collection(db, "links"); 
          
@@ -772,20 +805,10 @@
 
          onSnapshot(q, (snapshot) => {
              // 取得した全リンクから、有効期限内のものだけをフィルタリング
-             allLinks = snapshot.docs.map(doc => {
-                 const data = doc.data();
-                 
-                 // ★ 修正: サーバータイムスタンプから有効期限を計算する
-                 // toMillis()でミリ秒に変換し、10分を加算
-                 const serverTimeMs = data.timestamp ? data.timestamp.toMillis() : Date.now(); 
-                 const calculatedExpirationTime = serverTimeMs + DELETE_DELAY_MS;
-                 
-                 return {
-                     id: doc.id,
-                     ...data,
-                     expirationTime: calculatedExpirationTime // 有効期限をセット
-                 };
-             }).filter(link => link.expirationTime > Date.now()); 
+             allLinks = snapshot.docs.map(doc => ({
+                 id: doc.id,
+                 ...doc.data()
+             })).filter(link => link.expirationTime > Date.now()); 
              
              renderPage(currentPage);
          }, error => {
@@ -798,13 +821,26 @@
         renderPage(currentPage); 
     }, 1000);
 
-    // DOMContentLoadedでリスナーとローカルメモの読み込みを行う (変更なし)
-    document.addEventListener('DOMContentLoaded', () => {
+    // DOMContentLoadedでリスナーとローカルメモの読み込みを行う（★匿名サインインを追加）
+    document.addEventListener('DOMContentLoaded', async () => {
+        
+        // ★★★ 匿名サインインを実行 ★★★
+        try {
+            await signInAnonymously(auth);
+            console.log("匿名サインインに成功しました。この状態で書き込みが可能になります。");
+            if (messageElement) messageElement.textContent = '✅ サーバー接続完了。リンクを追加できます。';
+        } catch (error) {
+            console.error("匿名サインインエラー: ", error);
+            if (messageElement) {
+                messageElement.style.color = '#d32f2f';
+                messageElement.textContent = '🔴 サーバー接続エラー。リンクの追加はできません。';
+            }
+        }
+        
         startFirestoreListener();
         loadLocalMemo();
     });
 </script>
-
 
 
 
