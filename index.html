@@ -387,10 +387,14 @@
 
 
 
+
+
+
 <script type="module">
     // 1. Firebase v12のモジュールをインポート
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    // ★ serverTimestamp をインポートに追加
+    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
     // 2. Firebase設定と初期化
     const firebaseConfig = {
@@ -424,7 +428,7 @@
     const paginationContainer = document.getElementById('paginationContainer');
     const messageElement = resultContainer ? resultContainer.querySelector('p') : null;
 
-    // ローカルメモ関連のDOM要素
+    // ローカルメモ関連のDOM要素 (中略 - 変更なし)
     const savedMemoDisplay = document.getElementById('savedMemoDisplay');
     const newMemoInput = document.getElementById('newMemoInput');
     const saveButton = document.getElementById('saveMemoButton');
@@ -432,9 +436,8 @@
     const memoStatus = document.getElementById('memoStatus');
 
     // -----------------------------------------------------
-    // 音声要素の定義
+    // 音声要素の定義 (変更なし)
     // -----------------------------------------------------
-    // ⚠️ これらのパスはデモ環境では機能しない可能性が高いため、エラーを避けるためにコメントアウトまたは空にしています。
     const saveSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
     const clearSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
     saveSound.volume = 0.5;
@@ -442,7 +445,7 @@
 
 
     // -----------------------------------------------------
-    // ローカルメモの保存と読み込み/消去 (省略せずそのまま残しています)
+    // ローカルメモの保存と読み込み/消去 (中略 - 変更なし)
     // -----------------------------------------------------
     function loadLocalMemo() {
         if (!savedMemoDisplay || !newMemoInput) return;
@@ -566,7 +569,7 @@
     }
 
     // -----------------------------------------------------
-    // ページネーションと描画関連
+    // ページネーションと描画関連 (中略 - 変更なし)
     // -----------------------------------------------------
 
     function renderPage(pageNum) {
@@ -675,7 +678,7 @@
         }
 
         try {
-            // バリデーションとセキュリティチェック (中略)
+            // バリデーションとセキュリティチェック (中略 - 変更なし)
             if (url === "" && messageElement) {
                 messageElement.style.color = '#d32f2f';
                 messageElement.textContent = '⚠️ URLは必須です。入力してください。';
@@ -702,7 +705,7 @@
                 return;
             }
 
-            // URLの重複チェック
+            // URLの重複チェック (変更なし)
             const q = query(collection(db, "links"), where("url", "==", url), limit(1));
             const snapshot = await getDocs(q); 
 
@@ -714,23 +717,19 @@
                 return;
             }
 
-            // リンク名の処理
+            // リンク名の処理 (変更なし)
             if (linkName === "") {
                 linkName = "🔗 リンク";
             }
 
-            const startTime = Date.now();
-            const expirationTime = startTime + DELETE_DELAY_MS;
-
-            // Firestoreにデータを書き込む
+            // ★ 修正: サーバータイムスタンプを使用してFirestoreにデータを書き込む
             await addDoc(collection(db, "links"), {
                 url: url,
                 name: linkName,
-                expirationTime: expirationTime,
-                timestamp: startTime
+                timestamp: serverTimestamp() // ★ サーバーの正確な時刻を使用
             });
 
-            if (messageElement) messageElement.textContent = `✅ リンク「${linkName}」が追加されました。`;
+            if (messageElement) messageElement.textContent = `✅ リンク「${linkName}」がサーバー時刻で追加されました。`;
 
         } catch (error) {
             console.error("リンク処理エラー: ", error);
@@ -739,7 +738,7 @@
                 messageElement.textContent = '🔴 リンクの処理中に致命的なエラーが発生しました。コンソールを確認してください。';
             }
         } finally {
-            // 処理終了後に必ずボタンを再有効化
+            // 処理終了後に必ずボタンを再有効化 (変更なし)
             if (addButton) {
                 addButton.disabled = false;
                 addButton.textContent = '追加';
@@ -765,25 +764,28 @@
     function startFirestoreListener() {
          const linksCollection = collection(db, "links"); 
          
-         // 💡【修正内容】
-         // orderBy("expirationTime", "asc") の前に where("expirationTime", ">", Date.now()) が必要。
-         // しかし、where句とorderBy句は異なるフィールドに適用できないというFirebaseの制約があるため、
-         // 以下のクエリでは **timestamp** で並べ替えて、有効なリンクのみを取得します。
-         
-         // ★ 修正：where句がないため、有効期限切れのリンクも取得し、描画時に除外するロジックを採用
-         //          => リンク追加は timestamp で並べ替えるのが自然なため、この方法で再修正
          const q = query(
              linksCollection, 
-             orderBy("timestamp", "desc"), // ★ 新しいリンクを上に表示するため "desc" に変更
-             limit(100) // 無制限に取得すると負荷が高いため、最大100件に制限
+             orderBy("timestamp", "desc"), 
+             limit(100) 
          );
 
          onSnapshot(q, (snapshot) => {
              // 取得した全リンクから、有効期限内のものだけをフィルタリング
-             allLinks = snapshot.docs.map(doc => ({
-                 id: doc.id,
-                 ...doc.data()
-             })).filter(link => link.expirationTime > Date.now()); 
+             allLinks = snapshot.docs.map(doc => {
+                 const data = doc.data();
+                 
+                 // ★ 修正: サーバータイムスタンプから有効期限を計算する
+                 // toMillis()でミリ秒に変換し、10分を加算
+                 const serverTimeMs = data.timestamp ? data.timestamp.toMillis() : Date.now(); 
+                 const calculatedExpirationTime = serverTimeMs + DELETE_DELAY_MS;
+                 
+                 return {
+                     id: doc.id,
+                     ...data,
+                     expirationTime: calculatedExpirationTime // 有効期限をセット
+                 };
+             }).filter(link => link.expirationTime > Date.now()); 
              
              renderPage(currentPage);
          }, error => {
@@ -791,25 +793,17 @@
          });
     }
 
-    // 1秒ごとにタイマーとページを更新
+    // 1秒ごとにタイマーとページを更新 (変更なし)
     setInterval(() => {
-        // 🚨 修正：このタイマー更新は、リンクが消える（opacity:0になる）処理を反映させるためのみに機能します。
-        //          リンクがデータベースから完全に削除されるのは、別途設定されたFirebase Security RulesまたはCloud Functionsの役割です。
         renderPage(currentPage); 
     }, 1000);
 
-    // DOMContentLoadedでリスナーとローカルメモの読み込みを行う
+    // DOMContentLoadedでリスナーとローカルメモの読み込みを行う (変更なし)
     document.addEventListener('DOMContentLoaded', () => {
         startFirestoreListener();
         loadLocalMemo();
     });
 </script>
-
-
-
-
-
-
 
 
 
