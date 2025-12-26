@@ -732,17 +732,30 @@
                 return;
             }
 
-            // URLの重複チェック (変更なし)
-            const q = query(collection(db, "links"), where("url", "==", url), limit(1));
-            const snapshot = await getDocs(q); 
 
-            if (!snapshot.empty && messageElement) {
-                messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '🚫 このURLは**既に登録されています**。別のURLを入力してください。';
-                if (urlInput) urlInput.value = '';
-                if (linkNameInput) linkNameInput.value = '';
-                return;
-            }
+
+            // 1. 【お掃除】1時間以上前の古いデータを削除（再入力できるようにするため）
+const oneHourAgo = Date.now() - 60 * 60 * 1000;
+const oldDataQuery = query(collection(db, "links"), where("timestamp", "<", oneHourAgo));
+const oldSnap = await getDocs(oldDataQuery);
+// Firebaseコンソールでインデックス設定が必要な場合がありますが、まずは個別に削除を実行
+const deletePromises = [];
+oldSnap.forEach((doc) => {
+    // インポート済みの deleteDoc を使う（追加で import { deleteDoc } from ... が必要です ※後述）
+    deletePromises.push(deleteDoc(doc.ref));
+});
+await Promise.all(deletePromises);
+
+// 2. 【重複チェック】「1時間以内」かつ「同じURL」があるか確認
+const q = query(
+    collection(db, "links"), 
+    where("url", "==", url), 
+    where("timestamp", ">", oneHourAgo), // ★ここが重要！1時間前より新しいものだけ見る
+    limit(1)
+);
+const snapshot = await getDocs(q); 
+
+
 
             // リンク名の処理
             if (linkName === "") {
