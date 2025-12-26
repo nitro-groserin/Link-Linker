@@ -393,8 +393,12 @@
 <script type="module">
     // 1. Firebase v12のモジュールをインポート（変更なし）
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    // 4行目付近を以下のように修正
+    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js"; 
+
+
+    
 
     // 2. Firebase設定と初期化（変更なし）
     const firebaseConfig = {
