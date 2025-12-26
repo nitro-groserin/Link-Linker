@@ -387,16 +387,47 @@
 
 
 
-
-
-
 <script type="module">
-    // 1. Firebase v12のモジュールをインポート（変更なし）
+    // 1. 必要な機能をまとめてインポート（12.4.0で統一）
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-    // 4行目付近を以下のように修正
-    import { getFirestore, collection, query, where, limit, getDocs, addDoc, onSnapshot, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js"; 
+    import { 
+        getFirestore, 
+        collection, 
+        addDoc, 
+        serverTimestamp, 
+        Timestamp, // これが必要
+        query, where, limit, getDocs, onSnapshot, orderBy, deleteDoc 
+    } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
 
+    // --- ここに Firebase の設定 (firebaseConfig) が入ります ---
+    const firebaseConfig = {
+        // あなたの設定値...
+    };
+
+    // 2. 初期化
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // 3. データ保存の関数
+    async function saveData(inputText) {
+        // 現在時刻から1時間（3600秒）後の時刻を計算
+        const now = new Date();
+        const expireDate = new Date(now.getTime() + (60 * 60 * 1000));
+        const expireAt = Timestamp.fromDate(expireDate);
+
+        try {
+            await addDoc(collection(db, "your_collection"), {
+                text: inputText,
+                createdAt: serverTimestamp(), 
+                expireAt: expireAt // これをFirebaseコンソールのTTL設定に使う
+            });
+            console.log("保存成功！");
+        } catch (e) {
+            console.error("保存失敗: ", e);
+        }
+    }
 
     
 
