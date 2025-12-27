@@ -387,51 +387,25 @@
 
 
 
-<script type="module">
-    // 1. 必要な機能をまとめてインポート（12.4.0で統一）
+
+
+    <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
     import { 
         getFirestore, 
         collection, 
         addDoc, 
-        serverTimestamp, 
-        Timestamp, // これが必要
-        query, where, limit, getDocs, onSnapshot, orderBy, deleteDoc 
+        query, 
+        where, 
+        limit, 
+        getDocs, 
+        onSnapshot, 
+        orderBy, 
+        deleteDoc 
     } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
 
-    // --- ここに Firebase の設定 (firebaseConfig) が入ります ---
-    const firebaseConfig = {
-        // あなたの設定値...
-    };
-
-    // 2. 初期化
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
-
-    // 3. データ保存の関数
-    async function saveData(inputText) {
-        // 現在時刻から1時間（3600秒）後の時刻を計算
-        const now = new Date();
-        const expireDate = new Date(now.getTime() + (60 * 60 * 1000));
-        const expireAt = Timestamp.fromDate(expireDate);
-
-        try {
-            await addDoc(collection(db, "your_collection"), {
-                text: inputText,
-                createdAt: serverTimestamp(), 
-                expireAt: expireAt // これをFirebaseコンソールのTTL設定に使う
-            });
-            console.log("保存成功！");
-        } catch (e) {
-            console.error("保存失敗: ", e);
-        }
-    }
-
-    
-
-    // 2. Firebase設定と初期化（変更なし）
+    // 1. Firebase 設定
     const firebaseConfig = {
         apiKey: "AIzaSyDKt3Ho2JYOsrupclb5uIOTRMFbubuVRNk",
         authDomain: "link-linker.firebaseapp.com",
@@ -445,284 +419,38 @@
     const db = getFirestore(app); 
     const auth = getAuth(app); 
 
-    // =========================================================
-    // 3. メインロジック（すべての関数定義と変数）
-    // =========================================================
-
-    // リンクが自動削除されるまでの時間 (10分 = 600,000ミリ秒)
-    const DELETE_DELAY_MS = 60 * 60 * 1000;
-    // 1ページあたりのリンク数
+    // 2. 定数・変数
+    const DELETE_DELAY_MS = 60 * 60 * 1000; // ★1時間に変更
     const LINKS_PER_PAGE = 10;
-    // ローカルメモのキー
     const LOCAL_MEMO_KEY = 'linklinker_user_memo';
 
     let allLinks = [];
     let currentPage = 1;
 
+    // 音声要素の復活
+    const saveSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
+    const clearSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
+    saveSound.volume = 0.5;
+    clearSound.volume = 0.5;
+
+    // DOM要素
     const resultContainer = document.getElementById('resultContainer');
     const generatedLinksDiv = document.getElementById('generatedLinksDiv');
     const paginationContainer = document.getElementById('paginationContainer');
     const messageElement = resultContainer ? resultContainer.querySelector('p') : null;
-
-    // ローカルメモ関連のDOM要素
     const savedMemoDisplay = document.getElementById('savedMemoDisplay');
     const newMemoInput = document.getElementById('newMemoInput');
     const saveButton = document.getElementById('saveMemoButton');
     const clearButton = document.getElementById('clearMemoButton');
     const memoStatus = document.getElementById('memoStatus');
 
-    // -----------------------------------------------------
-    // 音声要素の定義 (変更なし)
-    // -----------------------------------------------------
-    const saveSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
-    const clearSound = new Audio('/sound-box/PC-Mouse06-1.mp3'); 
-    saveSound.volume = 0.5;
-    clearSound.volume = 0.5;
-
-    // -----------------------------------------------------
-    // ★★★ セキュリティ対策関数（XSS対策）の追加 ★★★
-    // -----------------------------------------------------
-    /**
-     * 入力されたテキストからHTMLタグを無害化し、XSSを防ぐ
-     * @param {string} text - サニタイズする文字列
-     * @returns {string} サニタイズされた文字列
-     */
+    // XSS対策
     function sanitizeInput(text) {
         if (!text) return '';
-        // HTML特殊文字をエンティティに変換し、ブラウザがHTMLとして解釈するのを防ぐ
-        return String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-    // -----------------------------------------------------
-
-
-    // -----------------------------------------------------
-    // ローカルメモの保存と読み込み/消去 (変更なし)
-    // -----------------------------------------------------
-    function loadLocalMemo() {
-        if (!savedMemoDisplay || !newMemoInput) return;
-
-        const savedJson = localStorage.getItem(LOCAL_MEMO_KEY);
-
-        try {
-            const savedMemos = savedJson ? JSON.parse(savedJson) : [];
-
-            if (savedMemos.length > 0) {
-                savedMemoDisplay.innerHTML = ''; 
-                savedMemos.reverse().forEach(memoData => {
-                    // ★ ローカルメモの表示にもサニタイズを適用することが望ましいですが、
-                    //    ここではローカルストレージの信頼性を前提として処理は据え置きます。
-                    appendMemoToDisplay(memoData.content, memoData.timestamp);
-                });
-                memoStatus.textContent = `${savedMemos.length}件のツイートが読み込まれました。`;
-            } else {
-                savedMemoDisplay.textContent = 'まだツイートはありません。';
-                memoStatus.textContent = '';
-            }
-
-        } catch (e) {
-            console.error("ローカルツイートの読み込みエラー。データ形式をリセットします。", e);
-            localStorage.removeItem(LOCAL_MEMO_KEY);
-            savedMemoDisplay.textContent = 'データ形式が不正でした。リセットしました。';
-        }
-
-
-        if (saveButton) {
-            saveButton.addEventListener('click', saveLocalMemo);
-        }
-        if (clearButton) {
-            clearButton.addEventListener('click', clearLocalMemo);
-        }
+        return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    function appendMemoToDisplay(content, timestamp) {
-        if (savedMemoDisplay.textContent === 'まだツイートはありません。') {
-            savedMemoDisplay.innerHTML = '';
-        }
-
-        const memoDiv = document.createElement('div');
-        memoDiv.style.padding = '8px 10px';
-        memoDiv.style.borderBottom = '1px solid #eee';
-        memoDiv.style.backgroundColor = '#fff';
-        memoDiv.style.borderRadius = '6px';
-        memoDiv.style.marginBottom = '5px';
-        memoDiv.style.wordBreak = 'break-word';
-
-        const contentP = document.createElement('p');
-        contentP.textContent = content; // textContentを使っているので、XSSは防げている
-        contentP.style.margin = '0 0 5px 0';
-        contentP.style.whiteSpace = 'pre-wrap';
-        contentP.style.color = '#333';
-
-        const timeSpan = document.createElement('span');
-        const date = new Date(timestamp);
-        timeSpan.textContent = `📝 ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-        timeSpan.style.fontSize = '0.8em';
-        timeSpan.style.color = '#777';
-        timeSpan.style.display = 'block';
-        timeSpan.style.textAlign = 'right';
-
-        memoDiv.appendChild(contentP);
-        memoDiv.appendChild(timeSpan);
-
-        savedMemoDisplay.prepend(memoDiv);
-    }
-
-    function saveLocalMemo() {
-        if (newMemoInput) {
-            const memoContent = newMemoInput.value.trim();
-
-            if (memoContent === "") {
-                memoStatus.textContent = '⚠️ ツイートが空です。何か入力してください。';
-                return;
-            }
-            // ★ ローカルメモへのサニタイズを適用 (XSS対策)
-            const sanitizedContent = sanitizeInput(memoContent);
-
-            saveButton.disabled = true;
-            saveButton.textContent = '保存中...';
-            clearButton.disabled = true;
-
-            const currentTimestamp = Date.now();
-            const newMemoData = {
-                content: sanitizedContent, // サニタイズしたものを保存
-                timestamp: currentTimestamp
-            };
-
-            const savedJson = localStorage.getItem(LOCAL_MEMO_KEY);
-            let savedMemos = savedJson ? JSON.parse(savedJson) : [];
-
-            savedMemos.push(newMemoData);
-
-            localStorage.setItem(LOCAL_MEMO_KEY, JSON.stringify(savedMemos));
-
-            appendMemoToDisplay(sanitizedContent, currentTimestamp); // サニタイズしたものを表示
-
-            newMemoInput.value = '';
-
-            memoStatus.textContent = `✅ ツイートが ${new Date(currentTimestamp).toLocaleTimeString()} に追加されました！`;
-            saveSound.play().catch(e => console.log("保存音の再生に失敗:", e)); 
-
-            setTimeout(() => {
-                saveButton.disabled = false;
-                saveButton.textContent = '💾 ツイートする';
-                clearButton.disabled = false;
-            }, 500);
-        }
-    }
-
-    function clearLocalMemo() {
-        if (confirm("保存されたツイートを完全に消去しますか？")) {
-            localStorage.removeItem(LOCAL_MEMO_KEY); 
-
-            savedMemoDisplay.innerHTML = '';
-            savedMemoDisplay.textContent = 'まだツイートはありません。';
-            newMemoInput.value = '';
-
-            memoStatus.textContent = '🗑️ ツイートは完全に消去されました。';
-            clearSound.play().catch(e => console.log("消去音の再生に失敗:", e)); 
-        }
-    }
-
-    // -----------------------------------------------------
-    // ページネーションと描画関連 (変更なし)
-    // -----------------------------------------------------
-
-    function renderPage(pageNum) {
-        const totalPages = Math.ceil(allLinks.length / LINKS_PER_PAGE);
-        if (pageNum < 1) pageNum = 1;
-        if (pageNum > totalPages && totalPages > 0) pageNum = totalPages;
-
-        currentPage = pageNum;
-
-        if (generatedLinksDiv) generatedLinksDiv.innerHTML = '';
-
-        const startIndex = (currentPage - 1) * LINKS_PER_PAGE;
-        const endIndex = startIndex + LINKS_PER_PAGE;
-        const linksToShow = allLinks.slice(startIndex, endIndex);
-
-        // リンクが空の場合、前のページへ戻る
-        if (linksToShow.length === 0 && allLinks.length > 0 && currentPage > 1) {
-            renderPage(currentPage - 1);
-            return;
-        }
-
-        linksToShow.forEach(linkData => {
-            const linkElement = createLinkElement(linkData);
-            if (generatedLinksDiv) generatedLinksDiv.appendChild(linkElement);
-
-            const timerDisplay = linkElement.querySelector('.timer-display');
-            if (timerDisplay) {
-                const remaining = linkData.expirationTime - Date.now();
-                // リンクが期限切れになる直前にフェードアウトさせるための処理を追加
-                if (remaining <= 3000) { // 例: 残り3秒で透明度を下げ始める
-                    linkElement.style.opacity = Math.max(0.2, remaining / 3000);
-                }
-                timerDisplay.textContent = formatTime(remaining);
-            }
-        });
-
-        renderPaginationButtons(totalPages);
-    }
-
-    function renderPaginationButtons(totalPages) {
-        if (paginationContainer) paginationContainer.innerHTML = '';
-
-        if (totalPages <= 1) {
-            return;
-        }
-
-        for (let i = 1; i <= totalPages; i++) {
-            const button = document.createElement('div');
-            button.className = 'page-button';
-            button.textContent = i;
-
-            if (i === currentPage) {
-                button.classList.add('active');
-            }
-
-            button.onclick = () => renderPage(i);
-            if (paginationContainer) paginationContainer.appendChild(button);
-        }
-    }
-
-    function createLinkElement(linkData) {
-        // ★ 描画時にはDOM要素のtextContentを使うことでXSSを防いでいるが、
-        //    linkData.nameはFirestoreから来ているため、sanitizeInput関数は不要
-        const linkElement = document.createElement('a');
-        linkElement.href = linkData.url;
-        linkElement.target = "_blank";
-        linkElement.dataset.id = linkData.id;
-
-        const nameContainer = document.createElement('span');
-        nameContainer.className = 'link-name';
-
-        const nameText = document.createElement('span');
-        nameText.textContent = linkData.name; // textContentで安全に表示
-
-        const timerDisplay = document.createElement('span');
-        timerDisplay.className = 'timer-display';
-
-        nameContainer.appendChild(nameText);
-        nameContainer.appendChild(timerDisplay);
-
-        const urlSpan = document.createElement('span');
-        urlSpan.className = 'link-url';
-        urlSpan.textContent = linkData.url;
-
-        linkElement.appendChild(nameContainer);
-        linkElement.appendChild(urlSpan);
-
-        return linkElement;
-    }
-
-    /**
-     * URL追加ボタンのメイン処理 (HTMLの onclick から呼び出される)
-     */
+    // 3. メイン：URL追加機能
     window.displayUrl = async function() { 
         const urlInput = document.getElementById('urlInput');
         const linkNameInput = document.getElementById('linkNameInput');
@@ -731,165 +459,168 @@
         const url = urlInput ? urlInput.value.trim() : '';
         let linkName = linkNameInput ? linkNameInput.value.trim() : '';
 
-        if (messageElement) messageElement.style.color = '#555';
-
-        // 処理中はボタンを無効化
         if (addButton) {
             addButton.disabled = true;
             addButton.textContent = '処理中...';
         }
 
         try {
-            // バリデーションとセキュリティチェック (変更なし)
-            if (url === "" && messageElement) {
-                messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '⚠️ URLは必須です。入力してください。';
-                return;
-            }
-            const MAX_URL_LENGTH = 500;
-            if (url.length > MAX_URL_LENGTH && messageElement) {
-                messageElement.style.color = '#d32f2f';
-                messageElement.textContent = `⚠️ URLが長すぎます。（最大${MAX_URL_LENGTH}文字までです。）`;
-                return;
-            }
-            const BLACKLISTED_DOMAINS = ['bit.ly', 't.co', 'tinyurl.com', 'is.gd', 'goo.gl', 'rb.gy', 'ow.ly'];
-            const isBlacklisted = BLACKLISTED_DOMAINS.some(domain => url.includes(domain));
-            if (isBlacklisted && messageElement) {
-                messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '⚠️ 短縮URLサービスからのリンクはセキュリティ上の理由により許可されていません。元のURLを貼り付けてください。';
-                return;
-            }
-            // URLパターンをより厳密にチェック（https://を推奨、javascript:などをブロック）
-            const urlPattern = /^https?:\/\/[a-z0-9\-\.]+\.[a-z]{2,}/i; 
-            if (!urlPattern.test(url) && messageElement) {
-                messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '⚠️ URLは **http://** または **https://** で始まり、有効なドメイン形式である必要があります。';
-                return;
-            }
-
-
-
-            // 1. 【お掃除】1時間以上前の古いデータを削除（再入力できるようにするため）
-const oneHourAgo = Date.now() - 60 * 60 * 1000;
-const oldDataQuery = query(collection(db, "links"), where("timestamp", "<", oneHourAgo));
-const oldSnap = await getDocs(oldDataQuery);
-// Firebaseコンソールでインデックス設定が必要な場合がありますが、まずは個別に削除を実行
-const deletePromises = [];
-oldSnap.forEach((doc) => {
-    // インポート済みの deleteDoc を使う（追加で import { deleteDoc } from ... が必要です ※後述）
-    deletePromises.push(deleteDoc(doc.ref));
-});
-await Promise.all(deletePromises);
-
-// 2. 【重複チェック】「1時間以内」かつ「同じURL」があるか確認
-const q = query(
-    collection(db, "links"), 
-    where("url", "==", url), 
-    where("timestamp", ">", oneHourAgo), // ★ここが重要！1時間前より新しいものだけ見る
-    limit(1)
-);
-const snapshot = await getDocs(q); 
-
-
-
-            // リンク名の処理
-            if (linkName === "") {
-                linkName = "🔗 リンク";
-            }
+            // --- 元のバリデーションを復活 ---
+            if (url === "") throw new Error("URLは必須です。");
+            if (url.length > 500) throw new Error("URLが長すぎます。");
             
-            // ★★★ リンク名にサニタイズを適用（XSS対策）★★★
-            const sanitizedLinkName = sanitizeInput(linkName);
+            const BLACKLISTED_DOMAINS = ['bit.ly', 't.co', 'tinyurl.com', 'is.gd', 'goo.gl', 'rb.gy', 'ow.ly'];
+            if (BLACKLISTED_DOMAINS.some(domain => url.includes(domain))) {
+                throw new Error("短縮URLは許可されていません。");
+            }
 
+            const urlPattern = /^https?:\/\/[a-z0-9\-\.]+\.[a-z]{2,}/i; 
+            if (!urlPattern.test(url)) throw new Error("http:// または https:// で始まる有効なURLを入力してください。");
+
+            // --- ★1時間以上前の古いデータを削除 (お掃除) ---
+            const oneHourAgo = Date.now() - DELETE_DELAY_MS;
+            const oldSnap = await getDocs(query(collection(db, "links"), where("timestamp", "<", oneHourAgo)));
+            oldSnap.forEach((doc) => deleteDoc(doc.ref));
+
+            // 保存処理
             const startTime = Date.now();
-            const expirationTime = startTime + DELETE_DELAY_MS;
+            const sanitizedLinkName = sanitizeInput(linkName || "🔗 リンク");
 
-            // Firestoreにデータを書き込む
             await addDoc(collection(db, "links"), {
                 url: url,
-                name: sanitizedLinkName, // ★ サニタイズしたリンク名を使用
-                expirationTime: expirationTime,
+                name: sanitizedLinkName,
+                expirationTime: startTime + DELETE_DELAY_MS,
                 timestamp: startTime
             });
 
-            if (messageElement) messageElement.textContent = `✅ リンク「${sanitizedLinkName}」が追加されました。`;
+            if (messageElement) {
+                messageElement.style.color = '#555';
+                messageElement.textContent = `✅ 「${sanitizedLinkName}」を追加しました。(1時間後に消えます)`;
+            }
 
         } catch (error) {
-            console.error("リンク処理エラー: ", error);
             if (messageElement) {
                 messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '🔴 リンクの処理中にエラーが発生しました。認証またはネットワークを確認してください。';
+                messageElement.textContent = `⚠️ ${error.message}`;
             }
         } finally {
-            // 処理終了後に必ずボタンを再有効化
             if (addButton) {
                 addButton.disabled = false;
                 addButton.textContent = '追加';
             }
             if (urlInput) urlInput.value = '';
             if (linkNameInput) linkNameInput.value = '';
-            if (linkNameInput) linkNameInput.focus();
         }
     }
 
+    // 4. リアルタイム監視
+    function startFirestoreListener() {
+        const q = query(collection(db, "links"), orderBy("timestamp", "desc"), limit(100));
+        onSnapshot(q, (snapshot) => {
+            const now = Date.now();
+            allLinks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                                   .filter(link => (link.timestamp + DELETE_DELAY_MS) > now); 
+            renderPage(currentPage);
+        });
+    }
+
+    // 5. 描画とタイマー
+    function renderPage(pageNum) {
+        if (!generatedLinksDiv) return;
+        const totalPages = Math.ceil(allLinks.length / LINKS_PER_PAGE);
+        currentPage = Math.max(1, Math.min(pageNum, totalPages || 1));
+
+        generatedLinksDiv.innerHTML = '';
+        const startIndex = (currentPage - 1) * LINKS_PER_PAGE;
+        const linksToShow = allLinks.slice(startIndex, startIndex + LINKS_PER_PAGE);
+
+        linksToShow.forEach(linkData => {
+            const remaining = (linkData.timestamp + DELETE_DELAY_MS) - Date.now();
+            const linkElement = document.createElement('a');
+            linkElement.href = linkData.url;
+            linkElement.target = "_blank";
+            if (remaining <= 3000) linkElement.style.opacity = Math.max(0.2, remaining / 3000);
+
+            linkElement.innerHTML = `
+                <span class="link-name">
+                    <span>${linkData.name}</span>
+                    <span class="timer-display">${formatTime(remaining)}</span>
+                </span>
+                <span class="link-url">${linkData.url}</span>
+            `;
+            generatedLinksDiv.appendChild(linkElement);
+        });
+        renderPaginationButtons(totalPages);
+    }
 
     function formatTime(ms) {
-        const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-
-        const paddedSeconds = String(seconds).padStart(2, '0');
-
-        return `${minutes}:${paddedSeconds}`;
+        const totalSec = Math.max(0, Math.floor(ms / 1000));
+        return `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}`;
     }
 
-    function startFirestoreListener() {
-         const linksCollection = collection(db, "links"); 
-         
-         const q = query(
-             linksCollection, 
-             orderBy("timestamp", "desc"), 
-             limit(100) 
-         );
-
-         onSnapshot(q, (snapshot) => {
-             // 取得した全リンクから、有効期限内のものだけをフィルタリング
-             allLinks = snapshot.docs.map(doc => ({
-                 id: doc.id,
-                 ...doc.data()
-             })).filter(link => link.expirationTime > Date.now()); 
-             
-             renderPage(currentPage);
-         }, error => {
-             console.error("Firestoreのリアルタイム監視エラー: ", error);
-         });
+    function renderPaginationButtons(totalPages) {
+        if (!paginationContainer) return;
+        paginationContainer.innerHTML = '';
+        if (totalPages <= 1) return;
+        for (let i = 1; i <= totalPages; i++) {
+            const btn = document.createElement('div');
+            btn.className = `page-button ${i === currentPage ? 'active' : ''}`;
+            btn.textContent = i;
+            btn.onclick = () => renderPage(i);
+            paginationContainer.appendChild(btn);
+        }
     }
 
-    // 1秒ごとにタイマーとページを更新 (変更なし)
-    setInterval(() => {
-        renderPage(currentPage); 
-    }, 1000);
+    // 6. ローカルメモ機能 (保存・削除・音声)
+    function appendMemoToDisplay(content, timestamp) {
+        if (savedMemoDisplay.textContent === 'まだツイートはありません。') savedMemoDisplay.innerHTML = '';
+        const memoDiv = document.createElement('div');
+        memoDiv.style = "padding:8px 10px; border-bottom:1px solid #eee; background:#fff; border-radius:6px; margin-bottom:5px; word-break:break-word;";
+        const date = new Date(timestamp);
+        memoDiv.innerHTML = `<p style="margin:0 0 5px 0; white-space:pre-wrap; color:#333;">${content}</p>
+                             <small style="color:#777; display:block; text-align:right;">📝 ${date.toLocaleString()}</small>`;
+        savedMemoDisplay.prepend(memoDiv);
+    }
 
-    // DOMContentLoadedでリスナーとローカルメモの読み込みを行う（★匿名サインインを追加）
+    function saveLocalMemo() {
+        const content = newMemoInput.value.trim();
+        if (!content) { memoStatus.textContent = '⚠️ 空です'; return; }
+        const memos = JSON.parse(localStorage.getItem(LOCAL_MEMO_KEY) || "[]");
+        const newMemo = { content: sanitizeInput(content), timestamp: Date.now() };
+        memos.push(newMemo);
+        localStorage.setItem(LOCAL_MEMO_KEY, JSON.stringify(memos));
+        appendMemoToDisplay(newMemo.content, newMemo.timestamp);
+        newMemoInput.value = '';
+        saveSound.play().catch(() => {});
+        memoStatus.textContent = '✅ 保存しました';
+    }
+
+    function clearLocalMemo() {
+        if (confirm("消去しますか？")) {
+            localStorage.removeItem(LOCAL_MEMO_KEY);
+            savedMemoDisplay.innerHTML = 'まだツイートはありません。';
+            clearSound.play().catch(() => {});
+            memoStatus.textContent = '🗑️ 消去完了';
+        }
+    }
+
+    // 7. 初期化
     document.addEventListener('DOMContentLoaded', async () => {
-        
-        // ★★★ 匿名サインインを実行 ★★★
         try {
             await signInAnonymously(auth);
-            console.log("匿名サインインに成功しました。この状態で書き込みが可能になります。");
-            if (messageElement) messageElement.textContent = '✅ サーバー接続完了。リンクを追加できます。';
-        } catch (error) {
-            console.error("匿名サインインエラー: ", error);
-            if (messageElement) {
-                messageElement.style.color = '#d32f2f';
-                messageElement.textContent = '🔴 サーバー接続エラー。リンクの追加はできません。';
+            startFirestoreListener();
+            const savedMemos = JSON.parse(localStorage.getItem(LOCAL_MEMO_KEY) || "[]");
+            if (savedMemoDisplay) {
+                savedMemoDisplay.innerHTML = savedMemos.length ? '' : 'まだツイートはありません。';
+                savedMemos.forEach(m => appendMemoToDisplay(m.content, m.timestamp));
             }
-        }
-        
-        startFirestoreListener();
-        loadLocalMemo();
+            if (saveButton) saveButton.onclick = saveLocalMemo;
+            if (clearButton) clearButton.onclick = clearLocalMemo;
+            setInterval(() => renderPage(currentPage), 1000);
+        } catch (e) { console.error(e); }
     });
 </script>
-
+    
 
 
 
