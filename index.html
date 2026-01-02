@@ -423,6 +423,27 @@
     const db = getFirestore(app); 
     const auth = getAuth(app); 
 
+
+        
+
+    // 接続数をカウントアップする例
+const connectionRef = db.collection('status').doc('connections');
+
+// ページを開いた時
+connectionRef.update({
+  activeUsers: firebase.firestore.FieldValue.increment(1)
+});
+
+// ページを閉じる（またはタブを閉じる）直前に実行
+window.addEventListener('beforeunload', () => {
+  connectionRef.update({
+    activeUsers: firebase.firestore.FieldValue.increment(-1)
+  });
+});
+
+
+        
+
     // 2. 定数・変数
     const DELETE_DELAY_MS = 480 * 60 * 1000; // ★1時間に変更
     const LINKS_PER_PAGE = 10;
